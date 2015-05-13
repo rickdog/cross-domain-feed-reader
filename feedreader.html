@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+	<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+	<meta http-equiv="Content-Style-Type" content="text/css">
+	<script src="http://code.jquery.com/jquery.min.js"></script>
+	<script src="http://rawgit.com/abdmob/x2js/master/xml2json.js" type="text/javascript"></script>
+	
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+	<style type="text/css"><!--
+
+	--></style>
+
+</head>
+
+<body>
+
+
+<input type="text" id="feedURL" placeholder="Enter feed URL" size="60" tabindex="1">
+&nbsp;&nbsp;<button onclick="run()">GO</button>
+<div id="feedDiv"></div>
+
+<script>
+function run()
+{
+	getXML($("#feedURL")[0].value,
+	  function(res)
+	  {
+		processFeed(res.responseText);
+	  }
+	)
+	/* if no callback, use deferred...
+	.success(function(response, statusText, xhrObj) {
+	  console.log(response, statusText, xhrObj);
+	  if (response.results.length == 1)
+	  {
+		console.log(response.results[0]);
+	  }
+	})
+	.error(function(xhrObj, textStatus, err) {
+	  console.log(xhrObj, textStatus, err);
+	});
+	*/
+}
+
+function processFeed(xmlText)
+{
+	var xmlSrc = xmlText;
+	var x2js = new X2JS();
+	var jas = x2js.xml_str2json(xmlSrc);
+	// JSON.stringify(jas)  
+
+	var d = document.createElement("DIV");
+	if (jas.rss)
+	{
+		var z = new viewRss(d, jas.rss);
+		var y = new viewRssItems(d, jas.rss);
+		z.render();
+		y.render();
+	}	
+	else if (jas.feed)
+	{
+		var z = new viewAtom(d, jas.feed);
+		var y = new viewAtomEntries(d, jas.feed);
+		z.render();
+		y.render();
+	}
+	document.querySelector('#feedDiv').innerHTML = d.innerHTML;
+}
+
+
+var viewRss = function(el, rss)
+{
+  this.el = el;
+  this.rss = rss;
+  this.template = function(node) { 
+		// note: need link logic, may not be array
+    return `<h1><a href="${node.link[1]}" target="_blank">${node.title}</a></h1>` +
+			     `<h2>${node.description}</h2>`; 
+  };
+  this.render = function()
+  {
+   	this.el.innerHTML += (this.template(this.rss.channel));
+  }
+}
+
+var viewRssItems = function(el, rss)
+{
+  this.el = el;
+  this.rss = rss;
+  this.template = function(node) {
+		var tmp = 
+			`<hr/><div><b><a href="${node.link}" target="_blank">${node.title}</a></b>` +
+			`<br>` + new Date(`${node.pubDate}`).toLocaleString() + 
+			(node.creator || node.author ? `<br>By ${node.creator || node.author}` : ``) +
+			`</div>` + 
+			(node.encoded ? `<div>${node.encoded}</div>` : `<div>${node.description}</div>`);
+		  if (node.enclosure) {
+				tmp +=
+					`<audio style="height: 28px; width: 50%;" controls>` +
+  				  `<source src="` + node.enclosure._url + `" type="audio/mpeg">` +
+				    `Your browser does not support the audio element.` +
+					`</audio><br/>`;
+			}
+			tmp += (node.comments ? `<div>Comments [${node.comments[1]}]: <a href="${node.comments[0]}">${node.comments[0]}" target="_blank"</a></div>` : ``) +
+				   (node.commentRss ? `<div>Comments feed: <a href="${node.commentRss}" target="_blank">${node.commentRss}</a></div>` : ``);
+
+		  return tmp + txtCategories(node.category);
+  };
+  this.render = function()
+  {
+		if (this.rss.channel.item)
+			this.rss.channel.item.forEach(function(node) {
+				this.el.innerHTML += (this.template(node));
+			}.bind(this));
+		else
+			this.el.innerHTML += `<h1>No items</h1>`;
+
+		this.el.innerHTML += `<hr/>[Last updated: ` + new Date(`${this.rss.channel.lastBuildDate}`).toLocaleString() 
+		 + (this.rss.channel.language ? `, Language: ${this.rss.channel.language}` : ``)
+		 + (this.rss.channel.updateFrequency && this.rss.channel.updateFrequency ? `, Update Interval: ${this.rss.channel.updateFrequency}/${this.rss.channel.updatePeriod}` : ``)
+		 + (this.rss.channel.generator ? `, Generator:${this.rss.channel.generator}` : ``) +  `]`;
+
+		this.el.innerHTML += txtCategories(this.rss.channel.category);
+	};
+}
+
+var viewAtom = function(el, feed)
+{
+  this.el = el;
+  this.feed = feed;
+  this.template = function(node) { 
+		var html = "";
+		this.feed.link.forEach(function(aNode) {
+			if (aNode._type == "text/html")
+			{
+				html = `<h1><a href="${aNode._href}" target="_blank">${node.title}</a></h1>`;
+			}
+		});
+		return html + (node.subtitle && node.subtitle.__text ? `<h2>${node.subtitle.__text}</h2>` : ``) + (node.author ? `Author: ` + txtAuthor(node.author) + `<br\>` : ``); 
+  };
+  this.render = function()
+  {
+	    this.el.innerHTML += (this.template(this.feed));
+  }
+}
+
+var viewAtomEntries = function(el, feed)
+{
+  this.el = el;
+  this.feed = feed;
+  this.template = function(node) {
+		var tmp = "<hr/><div>";
+		var link = node.link;
+		if (!	Array.isArray(link))
+			link = [link];
+	  link.forEach(function(aNode) {
+			if (aNode._rel == "alternate") {
+				tmp += `<b><a href="${aNode._href}" target="_blank">${node.title}</a></b>`;
+			}
+	  });
+		tmp += 
+     	`<br>` + new Date(`${node.updated ? node.updated : node.published}`).toLocaleString() + 
+			`<br>Author: ${txtAuthor(node.author)}`;
+		  if (node.thumbnail) {
+				tmp += ` <img src="${node.thumbnail._url}" style="height: ${node.thumbnail._height}; width: ${node.thumbnail._width}"></img>`;
+			}		  
+
+			tmp += `<div>${node.content}</div>`;
+		  if (node.enclosure) {
+				tmp +=
+					`<audio style="height: 28px; width: 50%;" controls>` +
+  				  `<source src="` + node.enclosure._url + `" type="audio/mpeg">` +
+				    `Your browser does not support the audio element.` +
+					`</audio><br/>`;
+			}
+		return tmp + `</div>`;
+  };
+  this.render = function()
+  {
+	  this.feed.entry.forEach(function(node) {
+	    this.el.innerHTML += (this.template(node));
+			this.el.innerHTML += txtCategories(node.category, true);
+	  }.bind(this));
+
+		this.el.innerHTML += `<hr/>[Last updated: ` + new Date(`${this.feed.updated}`).toLocaleString() 
+		 + (this.feed.generator ? `, Generator:${this.feed.generator}` : ``) +  `]`;
+
+		this.el.innerHTML += txtCategories(this.feed.category, true);
+	};
+}
+
+txtAuthor = function(author)
+{
+	var txt = "";
+	if (author.image)
+	{
+		var src = author.image._src;
+		if (src.substring(0,2) == "//")
+			src = "http:" + src;
+		txt += `<img src="${src}" style="height: ${author.image._height}; width: ${author.image._width}"/>`;
+	}
+	if (author.uri)
+	{
+		txt = `<a href="${author.uri}" target="_blank">` + txt + `${author.name}</a>`		
+	}
+	else if (author.name)
+	{
+		txt = txt + `${author.name}`		
+	}
+	return txt;
+}
+
+txtCategories = function(cats, isAtom)
+{
+	var txt = "";
+	if (cats)
+	{
+		txt += `<br\>category: `;
+		var tmp = cats;
+		if (!	Array.isArray(tmp))
+			tmp = [tmp];
+		txt += (isAtom ? `${tmp[0]._term}` : `${tmp[0]}`);
+		tmp.shift();
+		tmp.forEach(function(cat) {
+			txt += `, ${(isAtom ? cat._term : cat)}`;
+		});
+	}
+	return txt;
+}
+
+function getXML(theURL, callback)
+{
+	/**
+	 * jQuery.ajax mid - CROSS DOMAIN AJAX 
+	 * ---
+	 * @author James Padolsey (http://james.padolsey.com)
+	 * @version 0.11
+	 * @updated 12-JAN-10
+	 * ---
+	 * Note: Read the README!
+	 * ---
+	 * @info http://james.padolsey.com/javascript/cross-domain-requests-with-jquery/
+	 * source: https://raw.github.com/padolsey/jquery.fn/master/cross-domain-ajax/jquery.xdomainajax.js
+	 */
+	jQuery.ajax = (function(_ajax)
+	{
+		var protocol = location.protocol,
+			hostname = location.hostname,
+			exRegex = RegExp(protocol + '//' + hostname),
+			YQL = 'http' + (/^https/.test(protocol)?'s':'') + '://query.yahooapis.com/v1/public/yql?callback=?',
+			query = 'select * from html where url="{URL}" and xpath="*"';
+
+		function isExternal(url)
+		{
+			return !exRegex.test(url) && /:\/\//.test(url);
+		}
+
+		return function(o)
+		{
+			var url = o.url;
+			if (o.dataType == 'xml')   // @rickdog - fix for XML
+			   query = 'select * from xml where url="{URL}"';	// XML
+			if ( /get/i.test(o.type) && !/json/i.test(o.dataType) && isExternal(url) )
+			{
+				// Manipulate options so that JSONP-x request is made to YQL
+				o.url = YQL;
+				o.dataType = 'json';
+				o.data = {
+					q: query.replace('{URL}', url + (o.data ? (/\?/.test(url) ? '&' : '?') + jQuery.param(o.data) : '')),
+					format: 'xml'
+				};
+
+				// Since it's a JSONP request
+				// complete === success
+				if (!o.success && o.complete) {
+					o.success = o.complete;
+					delete o.complete;
+				}
+
+				o.success = (function(_success)
+				{
+					return function(data)
+					{
+						if (_success) {
+							// Fake XHR callback.
+							_success.call(this, {
+								// YQL screws with <script>s, Get rid of them
+								responseText: (data.results[0] || '')
+									.replace(/<script[^>]+?\/>|<script(.|\s)*?\/script>/gi, '')
+							}, 'success');
+						}
+					};
+				})(o.success);
+			}
+			return _ajax.apply(this, arguments); // not special, use base Jquery ajax
+		};
+	})(jQuery.ajax);
+
+
+	return $.ajax({
+		url: theURL,
+		type: 'GET',
+		dataType: 'xml',
+		success: function(res) {
+			// var text = res.responseText;
+			// .. then you can manipulate your text as you wish
+			callback ? callback(res) : undefined;
+		}
+	})
+};
+
+
+</script>
+
+
+</body></html>
