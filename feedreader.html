@@ -76,9 +76,9 @@ var viewRss = function(el, rss)
   this.el = el;
   this.rss = rss;
   this.template = function(node) { 
-		// note: need link logic, may not be array
+	// note: need link logic, may not be array
     return `<h1><a href="${node.link[1]}" target="_blank">${node.title}</a></h1>` +
-			     `<h2>${node.description}</h2>`; 
+		   `<h2>${node.description}</h2>`; 
   };
   this.render = function()
   {
@@ -134,7 +134,7 @@ var viewAtom = function(el, feed)
   this.template = function(node) { 
 		var html = "";
 		this.feed.link.forEach(function(aNode) {
-			if (aNode._type == "text/html")
+			if (aNode._type == "text/html" || aNode._type == undefined)
 			{
 				html = `<h1><a href="${aNode._href}" target="_blank">${node.title}</a></h1>`;
 			}
@@ -152,63 +152,66 @@ var viewAtomEntries = function(el, feed)
   this.el = el;
   this.feed = feed;
   this.template = function(node) {
-		var tmp = "<hr/><div>";
-		var link = node.link;
-		if (!	Array.isArray(link))
-			link = [link];
-	  link.forEach(function(aNode) {
-			if (aNode._rel == "alternate") {
-				tmp += `<b><a href="${aNode._href}" target="_blank">${node.title}</a></b>`;
-			}
+	var tmp = "<hr/><div>";
+	var link = node.link;
+	if (!Array.isArray(link))
+		link = [link];
+  		link.forEach(function(aNode) {
+		if (aNode._rel == "alternate" || aNode._rel == undefined) {
+			tmp += `<b><a href="${aNode._href}" target="_blank">${node.title}</a></b>`;
+		}
 	  });
-		tmp += 
-     	`<br>` + new Date(`${node.updated ? node.updated : node.published}`).toLocaleString() + 
-			`<br>Author: ${txtAuthor(node.author)}`;
-		  if (node.thumbnail) {
-				tmp += ` <img src="${node.thumbnail._url}" style="height: ${node.thumbnail._height}; width: ${node.thumbnail._width}"></img>`;
-			}		  
+	tmp += 
+		`<br>` + new Date(`${node.updated ? node.updated : node.published}`).toLocaleString() + 
+		`<br>` + (node.author ? `Author: ` + txtAuthor(node.author) + `<br\>` : ``);
+	if (node.thumbnail) {
+		tmp += ` <img src="${node.thumbnail._url}" style="height: ${node.thumbnail._height}; width: ${node.thumbnail._width}"></img>`;
+	}		  
 
-			tmp += `<div>${node.content}</div>`;
-		  if (node.enclosure) {
-				tmp +=
-					`<audio style="height: 28px; width: 50%;" controls>` +
-  				  `<source src="` + node.enclosure._url + `" type="audio/mpeg">` +
-				    `Your browser does not support the audio element.` +
-					`</audio><br/>`;
-			}
-		return tmp + `</div>`;
+	tmp += `<div>${node.content}</div>`;
+	if (node.enclosure) {
+		tmp +=
+			`<audio style="height: 28px; width: 50%;" controls>` +
+		  `<source src="` + node.enclosure._url + `" type="audio/mpeg">` +
+			`Your browser does not support the audio element.` +
+			`</audio><br/>`;
+	}
+	return tmp + `</div>`;
   };
-  this.render = function()
-  {
-	  this.feed.entry.forEach(function(node) {
-	    this.el.innerHTML += (this.template(node));
-			this.el.innerHTML += txtCategories(node.category, true);
-	  }.bind(this));
-
-		this.el.innerHTML += `<hr/>[Last updated: ` + new Date(`${this.feed.updated}`).toLocaleString() 
-		 + (this.feed.generator ? `, Generator:${this.feed.generator}` : ``) +  `]`;
-
-		this.el.innerHTML += txtCategories(this.feed.category, true);
+	this.render = function()
+	{
+	this.feed.entry.forEach(function(node) {
+	this.el.innerHTML += (this.template(node));
+		this.el.innerHTML += txtCategories(node.category, true);
+	}.bind(this));
+	
+	this.el.innerHTML += `<hr/>[Last updated: ` + new Date(`${this.feed.updated}`).toLocaleString() 
+	+ (this.feed.generator ? `, Generator:${this.feed.generator}` : ``) +  `]`;
+	
+	this.el.innerHTML += txtCategories(this.feed.category, true);
 	};
 }
 
 txtAuthor = function(author)
 {
 	var txt = "";
-	if (author.image)
+	if (author)
 	{
-		var src = author.image._src;
-		if (src.substring(0,2) == "//")
-			src = "http:" + src;
-		txt += `<img src="${src}" style="height: ${author.image._height}; width: ${author.image._width}"/>`;
-	}
-	if (author.uri)
-	{
-		txt = `<a href="${author.uri}" target="_blank">` + txt + `${author.name}</a>`		
-	}
-	else if (author.name)
-	{
-		txt = txt + `${author.name}`		
+		if (author.image)
+		{
+			var src = author.image._src;
+			if (src.substring(0,2) == "//")
+				src = "http:" + src;
+			txt += `<img src="${src}" style="height: ${author.image._height}; width: ${author.image._width}"/>`;
+		}
+		if (author.uri)
+		{
+			txt = `<a href="${author.uri}" target="_blank">` + txt + `${author.name}</a>`		
+		}
+		else if (author.name)
+		{
+			txt = txt + `${author.name}`		
+		}
 	}
 	return txt;
 }
@@ -298,7 +301,6 @@ function getXML(theURL, callback)
 			return _ajax.apply(this, arguments); // not special, use base Jquery ajax
 		};
 	})(jQuery.ajax);
-
 
 	return $.ajax({
 		url: theURL,
